@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "eter-customer-app",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "port": 4400,
+      "autoPort": true
+    }
+  ]
+}

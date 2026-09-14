@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>SEDA Registration — Eter Customer App</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="page">
+    <div class="brand-header">
+      <img src="/icons/icon-192.svg" alt="">
+      <span class="brand-name">Eter Customer App</span>
+    </div>
+    <div id="content"><div class="card" style="padding:40px 20px;"><div class="spinner"></div></div></div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const content = document.getElementById('content');
+    const customerId = getQueryParam('customer');
+    const invoiceId = getQueryParam('invoice');
+    const shareToken = getQueryParam('token');
+
+    const backHref = `invoice.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoiceId)}`;
+
+    const MALAYSIA_STATES = [
+      'Johor', 'Kedah', 'Kelantan', 'Melaka', 'Negeri Sembilan', 'Pahang', 'Perak', 'Perlis',
+      'Pulau Pinang', 'Sabah', 'Sarawak', 'Selangor', 'Terengganu',
+      'WP Kuala Lumpur', 'WP Labuan', 'WP Putrajaya'
+    ];
+
+    // Mirrors FILE_FIELDS in routes/sedaRoutes.js — keep in sync if that ever changes.
+    const FILE_FIELDS = {
+      mykad_front:   { label: 'MyKad Front',        accept: 'image/*',              maxMB: 20 },
+      mykad_back:    { label: 'MyKad Back',          accept: 'image/*',              maxMB: 20 },
+      mykad_pdf:     { label: 'MyKad (PDF)',         accept: 'application/pdf',      maxMB: 40 },
+      tnb_bill_1:    { label: 'TNB Bill — Month 1',  accept: 'application/pdf,image/*', maxMB: 25 },
+      tnb_bill_2:    { label: 'TNB Bill — Month 2',  accept: 'application/pdf,image/*', maxMB: 25 },
+      tnb_bill_3:    { label: 'TNB Bill — Month 3',  accept: 'application/pdf,image/*', maxMB: 25 },
+      property_proof:{ label: 'Property Ownership Proof', accept: 'application/pdf,image/*', maxMB: 25 },
+      tnb_meter:     { label: 'TNB Meter Photo',     accept: 'image/*',              maxMB: 20 },
+      tax_document:  { label: 'Tax Document',        accept: 'application/pdf,image/*', maxMB: 25 },
+      ssm_registration: { label: 'SSM Registration', accept: 'application/pdf,image/*', maxMB: 25 },
+      ssm_form_9:    { label: 'SSM Form 9',          accept: 'application/pdf,image/*', maxMB: 25 },
+      ssm_form_49:   { label: 'SSM Form 49',         accept: 'application/pdf,image/*', maxMB: 25 },
+      company_stamp: { label: 'Company Stamp',       accept: 'application/pdf,image/*', maxMB: 25 }
+    };
+    const TNB_12M_FIELD = { key: 'tnb_bills_12_months', label: 'TNB Bills (Up to 12 Months)', accept: 'application/pdf,image/*', maxMB: 25, maxFiles: 12 };
+
+    let sedaData = null;
+
+    function isImageUrl(url) {
+      return /\.(png|jpe?g|webp|gif)$/i.test(String(url || '').split('?')[0]);
+    }
+    function filenameFromUrl(url) {
+      try { return decodeURIComponent(String(url).split('/').pop()); } catch (e) { return String(url); }
+    }
+
+    function renderSinglePreview(fieldKey, url) {
+      if (!url) return '';
+      const thumb = isImageUrl(url)
+        ? `<img class="thumb" src="${escapeHtml(url)}" alt="">`
+        : `<div class="file-icon">📄</div>`;
+      return `
+        <div class="upload-preview">
+          ${thumb}
+          <div class="file-name">${escapeHtml(filenameFromUrl(url))}</div>
+        </div>
+        <div class="upload-actions">
+          <a class="btn btn-sm btn-outline" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open</a>
+          <button type="button" class="btn btn-sm btn-danger-outline" data-action="delete" data-field="${fieldKey}" data-url="${escapeHtml(url)}">Delete</button>
+        </div>
+      `;
+    }
+
+    function renderUploadField(fieldKey, cfg) {
+      const url = (sedaData || {})[fieldKey];
+      return `
+        <div class="field">
+          <label>${escapeHtml(cfg.label)}</label>
+          <div class="upload-box ${url ? 'has-file' : ''}">
+            ${url ? renderSinglePreview(fieldKey, url) : `
+              <input type="file" accept="${cfg.accept}" data-action="upload" data-field="${fieldKey}" data-max-mb="${cfg.maxMB}">
+            `}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTnbBillsMulti() {
+      const urls = Array.isArray((sedaData || {})[TNB_12M_FIELD.key]) ? sedaData[TNB_12M_FIELD.key] : [];
+      const items = urls.map((url) => `
+        <div class="upload-box has-file" style="margin-bottom:8px;">
+          ${renderSinglePreview(TNB_12M_FIELD.key, url)}
+        </div>
+      `).join('');
+      const canAddMore = urls.length < TNB_12M_FIELD.maxFiles;
+      return `
+        <div class="field">
+          <label>${escapeHtml(TNB_12M_FIELD.label)} (${urls.length}/${TNB_12M_FIELD.maxFiles})</label>
+          ${items}
+          ${canAddMore ? `
+            <div class="upload-box">
+              <input type="file" accept="${TNB_12M_FIELD.accept}" multiple data-action="upload-multi" data-field="${TNB_12M_FIELD.key}" data-max-mb="${TNB_12M_FIELD.maxMB}" data-max-files="${TNB_12M_FIELD.maxFiles - urls.length}">
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderMykadSection() {
+      const hasPdf = Boolean((sedaData || {}).mykad_pdf);
+      return `
+        <div class="field">
+          <label>Identity Document Type</label>
+          <div class="row">
+            <button type="button" class="btn ${hasPdf ? 'btn-outline' : 'btn-primary'}" data-action="mykad-mode" data-mode="images">Front &amp; Back Photos</button>
+            <button type="button" class="btn ${hasPdf ? 'btn-primary' : 'btn-outline'}" data-action="mykad-mode" data-mode="pdf">Single PDF</button>
+          </div>
+        </div>
+        <div id="mykad-images" ${hasPdf ? 'hidden' : ''}>
+          ${renderUploadField('mykad_front', FILE_FIELDS.mykad_front)}
+          ${renderUploadField('mykad_back', FILE_FIELDS.mykad_back)}
+        </div>
+        <div id="mykad-pdf" ${hasPdf ? '' : 'hidden'}>
+          ${renderUploadField('mykad_pdf', FILE_FIELDS.mykad_pdf)}
+        </div>
+      `;
+    }
+
+    function renderSignatureBlock() {
+      const inv = (sedaData || {}).invoice_details;
+      if (!inv) {
+        return `<div class="card"><p class="subtitle" style="margin:0;">Quotation not linked yet.</p></div>`;
+      }
+      if (inv.customer_signature) {
+        return `
+          <div class="card">
+            <h2>Quotation Signature</h2>
+            <p class="subtitle" style="margin-bottom:0;">Your quotation has already been signed. ✅</p>
+          </div>
+        `;
+      }
+      const solarAppBase = apiBaseUrl();
+      const quoteUrl = `${solarAppBase}/view/${inv.share_token || inv.bubble_id}`;
+      return `
+        <div class="card">
+          <h2>Quotation Signature</h2>
+          <p class="subtitle">Your quotation hasn't been signed yet. Please sign it before completing SEDA registration.</p>
+          <a class="btn btn-outline" href="${escapeHtml(quoteUrl)}" target="_blank" rel="noopener">View &amp; Sign Quotation</a>
+        </div>
+      `;
+    }
+
+    function renderDeletedFiles() {
+      const deleted = Array.isArray((sedaData || {}).deleted_uploads) ? sedaData.deleted_uploads : [];
+      if (!deleted.length) return '';
+      const rows = deleted.map((d) => `
+        <div class="row" style="align-items:center;margin-bottom:8px;">
+          <div style="font-size:0.8rem;color:var(--slate-700);">
+            ${escapeHtml(d.field)} — deleted ${fmtDate(d.deletedAt)}
+          </div>
+          <button type="button" class="btn btn-sm btn-outline" style="flex:0 0 auto;width:auto;" data-action="restore" data-field="${d.field}" data-recycle-id="${d.recycleBinId}">Restore</button>
+        </div>
+      `).join('');
+      return `
+        <div class="card">
+          <h2>Recently Deleted</h2>
+          ${rows}
+        </div>
+      `;
+    }
+
+    function checklist() {
+      const d = sedaData || {};
+      const items = [
+        { label: 'Applicant Name', done: !!(d.customer_name || '').trim() },
+        { label: 'IC Number', done: !!(d.ic_no || '').trim() },
+        { label: 'Phone Number', done: !!(d.phone || '').trim() },
+        { label: 'Installation Address', done: !!(d.installation_address || '').trim() },
+        { label: 'Identity Document', done: !!(d.mykad_pdf || (d.mykad_front && d.mykad_back)) },
+        { label: 'TNB Bill', done: !!d.tnb_bill_1 },
+        { label: 'Ownership Proof', done: !!d.property_proof },
+        { label: 'TNB Meter Photo', done: !!d.tnb_meter }
+      ];
+      const doneCount = items.filter((i) => i.done).length;
+      const pct = Math.round((doneCount / items.length) * 100);
+      return `
+        <div class="card">
+          <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
+          <div class="progress-label">${doneCount}/${items.length} complete (${pct}%)</div>
+          ${items.map((i) => `
+            <div class="checklist-row">
+              <span class="checklist-dot ${i.done ? 'done' : ''}"></span>
+              <span>${escapeHtml(i.label)}</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function val(v) { return escapeHtml(v == null ? '' : v); }
+
+    function renderForm() {
+      const d = sedaData || {};
+      content.innerHTML = `
+        <a class="back-link" href="${backHref}">&larr; Back to Invoice</a>
+        <div class="card">
+          <h1>SEDA Registration Form</h1>
+          <p class="subtitle" style="margin-bottom:0;">Fill in your details and upload the required documents below. You can save your progress and come back anytime using the same link.</p>
+        </div>
+
+        ${checklist()}
+        ${renderSignatureBlock()}
+
+        <form id="seda-form">
+          <div class="section-title">Applicant Information</div>
+          <div class="card">
+            <div class="field"><label>Full Name</label><input type="text" id="f_customer_name" value="${val(d.customer_name)}"></div>
+            <div class="row">
+              <div class="field"><label>IC Number</label><input type="text" id="f_ic_no" placeholder="900101-14-1234" value="${val(d.ic_no)}"></div>
+              <div class="field"><label>Phone</label><input type="tel" id="f_phone" value="${val(d.phone)}"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label>Email</label><input type="email" id="f_email" value="${val(d.email)}"></div>
+              <div class="field"><label>TIN</label><input type="text" id="f_tin" value="${val(d.tin)}"></div>
+            </div>
+            <div class="field"><label>Registered Address</label><textarea id="f_registered_address" rows="2">${val(d.registered_address)}</textarea></div>
+          </div>
+
+          <div class="section-title">Installation Site</div>
+          <div class="card">
+            <div class="field">
+              <label>Installation Address</label>
+              <textarea id="f_installation_address" rows="3">${val(d.installation_address)}</textarea>
+              <button type="button" class="btn btn-sm btn-outline" style="width:auto;margin-top:6px;" id="btn-copy-address">Copy from Registered Address</button>
+            </div>
+            <div class="row">
+              <div class="field"><label>City</label><input type="text" id="f_city" value="${val(d.city)}"></div>
+              <div class="field">
+                <label>State</label>
+                <select id="f_state">
+                  <option value="">Select state</option>
+                  ${MALAYSIA_STATES.map((s) => `<option value="${s}" ${d.state === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="field"><label>Postcode</label><input type="text" id="f_postcode" value="${val(d.postcode)}"></div>
+          </div>
+
+          <div class="section-title">Identity Document</div>
+          <div class="card">${renderMykadSection()}</div>
+
+          <div class="section-title">TNB Bills</div>
+          <div class="card">
+            <div class="row">
+              <div class="field"><label>TNB Account No.</label><input type="text" id="f_tnb_account_no" value="${val(d.tnb_account_no)}"></div>
+              <div class="field">
+                <label>Phase Type</label>
+                <select id="f_phase_type">
+                  <option value="">Select</option>
+                  <option value="1" ${d.phase_type === '1' ? 'selected' : ''}>Single Phase</option>
+                  <option value="3" ${d.phase_type === '3' ? 'selected' : ''}>Three Phase</option>
+                </select>
+              </div>
+            </div>
+            ${renderUploadField('tnb_bill_1', FILE_FIELDS.tnb_bill_1)}
+            ${renderUploadField('tnb_bill_2', FILE_FIELDS.tnb_bill_2)}
+            ${renderUploadField('tnb_bill_3', FILE_FIELDS.tnb_bill_3)}
+            ${renderTnbBillsMulti()}
+          </div>
+
+          <div class="section-title">Emergency Contact</div>
+          <div class="card">
+            <div class="row">
+              <div class="field"><label>Name</label><input type="text" id="f_e_contact_name" value="${val(d.e_contact_name)}"></div>
+              <div class="field"><label>Relationship</label><input type="text" id="f_e_contact_relationship" value="${val(d.e_contact_relationship)}"></div>
+            </div>
+            <div class="row">
+              <div class="field"><label>Phone</label><input type="tel" id="f_e_contact_no" value="${val(d.e_contact_no)}"></div>
+              <div class="field"><label>Email</label><input type="email" id="f_e_email" value="${val(d.e_email)}"></div>
+            </div>
+            <div class="field"><label>IC Number</label><input type="text" id="f_e_contact_mykad" placeholder="900101-14-1234" value="${val(d.e_contact_mykad)}"></div>
+          </div>
+
+          <div class="section-title">Supporting Documents</div>
+          <div class="card">
+            ${renderUploadField('property_proof', FILE_FIELDS.property_proof)}
+            ${renderUploadField('tnb_meter', FILE_FIELDS.tnb_meter)}
+          </div>
+
+          <div class="section-title">Company Documents <span style="text-transform:none;font-weight:400;">(only if registering under a company)</span></div>
+          <div class="card">
+            ${renderUploadField('tax_document', FILE_FIELDS.tax_document)}
+            ${renderUploadField('ssm_registration', FILE_FIELDS.ssm_registration)}
+            ${renderUploadField('ssm_form_9', FILE_FIELDS.ssm_form_9)}
+            ${renderUploadField('ssm_form_49', FILE_FIELDS.ssm_form_49)}
+            ${renderUploadField('company_stamp', FILE_FIELDS.company_stamp)}
+          </div>
+
+          ${renderDeletedFiles()}
+
+          <button type="submit" class="btn btn-primary" id="btn-save">Save</button>
+        </form>
+      `;
+
+      wireEvents();
+    }
+
+    function collectPayload() {
+      return {
+        customer_name: document.getElementById('f_customer_name').value,
+        ic_no: document.getElementById('f_ic_no').value,
+        phone: document.getElementById('f_phone').value,
+        email: document.getElementById('f_email').value,
+        tin: document.getElementById('f_tin').value,
+        registered_address: document.getElementById('f_registered_address').value,
+        installation_address: document.getElementById('f_installation_address').value,
+        city: document.getElementById('f_city').value,
+        state: document.getElementById('f_state').value,
+        postcode: document.getElementById('f_postcode').value,
+        tnb_account_no: document.getElementById('f_tnb_account_no').value,
+        phase_type: document.getElementById('f_phase_type').value,
+        e_contact_name: document.getElementById('f_e_contact_name').value,
+        e_contact_relationship: document.getElementById('f_e_contact_relationship').value,
+        e_contact_no: document.getElementById('f_e_contact_no').value,
+        e_email: document.getElementById('f_e_email').value,
+        e_contact_mykad: document.getElementById('f_e_contact_mykad').value
+      };
+    }
+
+    function wireEvents() {
+      document.getElementById('seda-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('btn-save');
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        try {
+          await saveSedaFields(shareToken, collectPayload());
+          showToast('Saved.', 'success');
+          await loadData();
+        } catch (err) {
+          showToast(err.message || 'Failed to save.', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Save';
+        }
+      });
+
+      const copyBtn = document.getElementById('btn-copy-address');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          document.getElementById('f_installation_address').value = document.getElementById('f_registered_address').value;
+        });
+      }
+
+      content.querySelectorAll('[data-action="mykad-mode"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const showPdf = btn.dataset.mode === 'pdf';
+          document.getElementById('mykad-images').hidden = showPdf;
+          document.getElementById('mykad-pdf').hidden = !showPdf;
+          content.querySelectorAll('[data-action="mykad-mode"]').forEach((b) => {
+            b.className = (b === btn) ? 'btn btn-primary' : 'btn btn-outline';
+          });
+        });
+      });
+
+      content.querySelectorAll('[data-action="upload"]').forEach((input) => {
+        input.addEventListener('change', () => handleSingleUpload(input));
+      });
+      content.querySelectorAll('[data-action="upload-multi"]').forEach((input) => {
+        input.addEventListener('change', () => handleMultiUpload(input));
+      });
+      content.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+        btn.addEventListener('click', () => handleDelete(btn));
+      });
+      content.querySelectorAll('[data-action="restore"]').forEach((btn) => {
+        btn.addEventListener('click', () => handleRestore(btn));
+      });
+    }
+
+    async function handleSingleUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const fieldKey = input.dataset.field;
+      const maxMB = Number(input.dataset.maxMb);
+      if (file.size > maxMB * 1024 * 1024) {
+        showToast(`File too large. Max ${maxMB}MB.`, 'error');
+        input.value = '';
+        return;
+      }
+      try {
+        await uploadSedaFile(shareToken, fieldKey, file);
+        showToast('Uploaded.', 'success');
+        await loadData();
+      } catch (err) {
+        showToast(err.message || 'Upload failed.', 'error');
+      }
+    }
+
+    async function handleMultiUpload(input) {
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      const fieldKey = input.dataset.field;
+      const maxMB = Number(input.dataset.maxMb);
+      const maxFiles = Number(input.dataset.maxFiles);
+      if (files.length > maxFiles) {
+        showToast(`You can only add ${maxFiles} more file(s).`, 'error');
+        return;
+      }
+      for (const file of files) {
+        if (file.size > maxMB * 1024 * 1024) {
+          showToast(`${file.name} is too large. Max ${maxMB}MB.`, 'error');
+          continue;
+        }
+        try {
+          await uploadSedaFile(shareToken, fieldKey, file);
+        } catch (err) {
+          showToast(err.message || `Failed to upload ${file.name}.`, 'error');
+        }
+      }
+      showToast('Upload complete.', 'success');
+      await loadData();
+    }
+
+    async function handleDelete(btn) {
+      if (!confirm('Delete this file?')) return;
+      try {
+        await deleteSedaFile(shareToken, btn.dataset.field, btn.dataset.url);
+        showToast('Deleted.', 'success');
+        await loadData();
+      } catch (err) {
+        showToast(err.message || 'Delete failed.', 'error');
+      }
+    }
+
+    async function handleRestore(btn) {
+      try {
+        await restoreSedaFile(shareToken, btn.dataset.field, Number(btn.dataset.recycleId));
+        showToast('Restored.', 'success');
+        await loadData();
+      } catch (err) {
+        showToast(err.message || 'Restore failed.', 'error');
+      }
+    }
+
+    async function loadData() {
+      sedaData = await fetchSedaData(shareToken);
+      renderForm();
+    }
+
+    (async () => {
+      if (!shareToken) {
+        showFatalError(content, 'SEDA registration is not available for this invoice yet.', {
+          backHref, backLabel: 'Back to Invoice'
+        });
+        return;
+      }
+      try {
+        await loadData();
+      } catch (err) {
+        showFatalError(content, err.message || 'This SEDA registration link is unavailable.', {
+          backHref, backLabel: 'Back to Invoice'
+        });
+      }
+    })();
+  </script>
+</body>
+</html>

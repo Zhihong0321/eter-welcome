@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Invoice — Eter Customer App</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="page">
+    <div class="brand-header">
+      <img src="/icons/icon-192.svg" alt="">
+      <span class="brand-name">Eter Customer App</span>
+    </div>
+    <div id="content"><div class="card" style="padding:40px 20px;"><div class="spinner"></div></div></div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const content = document.getElementById('content');
+    const customerId = getQueryParam('customer');
+    const invoiceId = getQueryParam('invoice');
+
+    function render(customer, invoice) {
+      const sedaHref = invoice.seda && invoice.seda.share_token
+        ? `seda-form.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&token=${encodeURIComponent(invoice.seda.share_token)}`
+        : null;
+
+      content.innerHTML = `
+        <a class="back-link" href="dashboard.html?customer=${encodeURIComponent(customerId)}">&larr; Back to My Invoices</a>
+        <div class="card">
+          <h1>${escapeHtml(invoice.invoice_number || invoice.bubble_id)}</h1>
+          <p class="subtitle" style="margin-bottom:0;">${escapeHtml(customer.name || '')} · ${fmtDate(invoice.invoice_date)}</p>
+          <div class="row" style="margin-top:16px;">
+            <div>
+              <label style="margin-bottom:2px;">Total</label>
+              <div style="font-weight:700;">${fmtMoney(invoice.total_amount)}</div>
+            </div>
+            <div>
+              <label style="margin-bottom:2px;">Balance Due</label>
+              <div style="font-weight:700;">${fmtMoney(invoice.balance_due)}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">What would you like to view?</div>
+        <div class="stack">
+          <button class="btn btn-primary" id="btn-quotation">View Quotation</button>
+          <button class="btn btn-outline" id="btn-printable">View Quotation (Printable)</button>
+          <button class="btn btn-outline" id="btn-seda" ${sedaHref ? '' : 'disabled'}>
+            ${sedaHref ? 'SEDA Registration Form' : 'SEDA Registration Form (not ready yet)'}
+          </button>
+        </div>
+      `;
+
+      document.getElementById('btn-quotation').addEventListener('click', () => {
+        window.open(invoice.quotation_url, '_blank', 'noopener');
+      });
+      document.getElementById('btn-printable').addEventListener('click', () => {
+        window.open(invoice.printable_url, '_blank', 'noopener');
+      });
+      if (sedaHref) {
+        document.getElementById('btn-seda').addEventListener('click', () => {
+          window.location.href = sedaHref;
+        });
+      }
+    }
+
+    (async () => {
+      if (!customerId || !invoiceId) {
+        showFatalError(content, 'Missing customer or invoice reference.');
+        return;
+      }
+      try {
+        const data = await fetchCustomerPortal(customerId);
+        const invoice = data.invoices.find((inv) => inv.bubble_id === invoiceId);
+        if (!invoice) {
+          showFatalError(content, 'That invoice could not be found on this account.', {
+            backHref: `dashboard.html?customer=${encodeURIComponent(customerId)}`,
+            backLabel: 'Back to My Invoices'
+          });
+          return;
+        }
+        render(data.customer, invoice);
+      } catch (err) {
+        showFatalError(content, 'Something went wrong loading this invoice. Please try again.');
+      }
+    })();
+  </script>
+</body>
+</html>

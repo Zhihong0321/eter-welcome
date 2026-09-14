@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+  <title>Eter Customer App</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="page">
+    <div class="brand-header">
+      <img src="/icons/icon-192.svg" alt="">
+      <span class="brand-name">Eter Customer App</span>
+    </div>
+
+    <div class="card" id="search-card">
+      <h1>Find your account</h1>
+      <p class="subtitle">Enter your full name to view your quotations and SEDA registration form.</p>
+
+      <form id="lookup-form">
+        <div class="field">
+          <label for="customer-name">Full Name</label>
+          <input type="text" id="customer-name" name="customerName" placeholder="e.g. Ahmad Bin Ismail" autocomplete="name" required>
+        </div>
+        <button type="submit" class="btn btn-primary" id="submit-btn">Search</button>
+        <p class="error-text" id="error-text" hidden></p>
+      </form>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const form = document.getElementById('lookup-form');
+    const input = document.getElementById('customer-name');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorText = document.getElementById('error-text');
+    const results = document.getElementById('results');
+
+    function goToDashboard(customerId) {
+      window.location.href = `dashboard.html?customer=${encodeURIComponent(customerId)}`;
+    }
+
+    function renderMatches(matches) {
+      if (!matches.length) {
+        results.innerHTML = `
+          <div class="card empty-state">
+            We couldn't find an account under that name.<br>Please check the spelling or contact your agent.
+          </div>
+        `;
+        return;
+      }
+
+      results.innerHTML = `
+        <div class="section-title">Select your account</div>
+        ${matches.map((m) => `
+          <button type="button" class="invoice-card" style="width:100%;border:1px solid var(--slate-200);text-align:left;" data-id="${escapeHtml(m.customer_id)}">
+            <div>
+              <div class="inv-number">${escapeHtml(m.name)}</div>
+              <div class="inv-meta">${m.phone_masked ? escapeHtml(m.phone_masked) : 'No phone on file'}</div>
+            </div>
+          </button>
+        `).join('')}
+        ${matches.length === 20 ? '<p class="subtitle">Showing the first 20 matches — try a more complete name if you don\'t see your account.</p>' : ''}
+      `;
+
+      results.querySelectorAll('[data-id]').forEach((btn) => {
+        btn.addEventListener('click', () => goToDashboard(btn.dataset.id));
+      });
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = input.value.trim();
+      errorText.hidden = true;
+      results.innerHTML = '';
+      if (!name) return;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Searching…';
+      try {
+        const matches = await searchCustomersByName(name);
+        if (matches.length === 1) {
+          goToDashboard(matches[0].customer_id);
+          return;
+        }
+        renderMatches(matches);
+      } catch (err) {
+        errorText.textContent = 'Something went wrong. Please try again in a moment.';
+        errorText.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Search';
+      }
+    });
+  </script>
+</body>
+</html>

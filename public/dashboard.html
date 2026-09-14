@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>My Account — Eter Customer App</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="page">
+    <div class="brand-header">
+      <img src="/icons/icon-192.svg" alt="">
+      <span class="brand-name">Eter Customer App</span>
+    </div>
+    <div id="content"><div class="card" style="padding:40px 20px;"><div class="spinner"></div></div></div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const content = document.getElementById('content');
+    const customerId = getQueryParam('customer');
+
+    function statusBadge(invoice) {
+      if (invoice.balance_due <= 0 && invoice.total_amount > 0) {
+        return '<span class="badge paid">Fully Paid</span>';
+      }
+      if (invoice.paid_amount > 0) {
+        return '<span class="badge balance">Partially Paid</span>';
+      }
+      return '<span class="badge">Draft</span>';
+    }
+
+    function render(data) {
+      const { customer, invoices } = data;
+      const invoiceRows = invoices.length
+        ? invoices.map((inv) => `
+            <a class="invoice-card" href="invoice.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(inv.bubble_id)}">
+              <div>
+                <div class="inv-number">${escapeHtml(inv.invoice_number || inv.bubble_id)}</div>
+                <div class="inv-meta">${escapeHtml(inv.package_name || '')}${inv.package_name ? ' · ' : ''}${fmtDate(inv.invoice_date)} · ${statusBadge(inv)}</div>
+              </div>
+              <div>
+                <div class="inv-amount">${fmtMoney(inv.total_amount)}</div>
+                <div class="inv-balance">${inv.balance_due > 0 ? `Balance: ${fmtMoney(inv.balance_due)}` : 'No balance due'}</div>
+              </div>
+            </a>
+          `).join('')
+        : '<div class="card empty-state">No invoices found on this account yet.</div>';
+
+      content.innerHTML = `
+        <div class="card">
+          <h1>${escapeHtml(customer.name || 'Your Account')}</h1>
+          <p class="subtitle" style="margin-bottom:0;">Customer ID: ${escapeHtml(customer.customer_id)}</p>
+        </div>
+        <div class="section-title">Your Invoices</div>
+        ${invoiceRows}
+      `;
+    }
+
+    (async () => {
+      if (!customerId) {
+        showFatalError(content, 'No Customer ID was provided.');
+        return;
+      }
+      try {
+        const data = await fetchCustomerPortal(customerId);
+        render(data);
+      } catch (err) {
+        showFatalError(content, err.status === 404
+          ? "We couldn't find that Customer ID."
+          : 'Something went wrong loading your account. Please try again.');
+      }
+    })();
+  </script>
+</body>
+</html>
