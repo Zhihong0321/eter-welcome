@@ -269,3 +269,38 @@ input:focus, select:focus, textarea:focus {
 .checklist-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--slate-700); padding: 4px 0; }
 .checklist-dot { width: 9px; height: 9px; border-radius: 9999px; background: var(--slate-200); flex-shrink: 0; }
 .checklist-dot.done { background: var(--success); }
+
+/* Onboarding journey stepper */
+.journey-step { display: flex; gap: 14px; }
+.journey-indicator { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.journey-circle {
+  width: 34px; height: 34px; border-radius: 9999px;
+  background: var(--slate-200); color: var(--slate-500);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+}
+.journey-circle.done { background: var(--success); color: #fff; }
+.journey-circle.current { background: var(--primary); color: #fff; }
+.journey-line { flex: 1; width: 2px; background: var(--slate-200); min-height: 20px; margin: 4px 0; }
+.journey-line.done { background: var(--success); }
+.journey-body { flex: 1; padding-bottom: 26px; min-width: 0; }
+.journey-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.journey-title { font-weight: 700; color: var(--slate-900); }
+.journey-subtitle { font-size: 0.8rem; color: var(--slate-500); margin-bottom: 12px; }
+.journey-step.locked .journey-body { opacity: 0.55; }
+.journey-locked-note { font-size: 0.8rem; color: var(--slate-500); font-style: italic; }
+
+/* Payment milestone progress */
+.milestone-track { position: relative; height: 10px; background: var(--slate-100); border-radius: 9999px; margin: 10px 0 30px; }
+.milestone-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--success); border-radius: 9999px; transition: width 0.2s ease; }
+.milestone-marker { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--slate-400); transform: translateX(-50%); }
+.milestone-marker.reached { background: #065f46; }
+.milestone-label { position: absolute; top: 14px; transform: translateX(-50%); font-size: 0.65rem; color: var(--slate-500); white-space: nowrap; text-align: center; }
+.payment-summary-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.payment-summary-amount { font-weight: 700; color: var(--slate-900); }
+.payment-summary-percent { font-weight: 700; color: #065f46; }
+
+.payment-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.payment-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--slate-200); border-radius: 0.6rem; font-size: 0.85rem; }
+.payment-row .payment-amount { font-weight: 700; color: var(--slate-900); }
+.payment-row .payment-meta { font-size: 0.75rem; color: var(--slate-500); }

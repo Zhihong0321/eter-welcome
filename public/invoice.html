@@ -27,54 +27,153 @@
     const customerId = getQueryParam('customer');
     const invoiceId = getQueryParam('invoice');
 
+    function cumulativeMilestones(schedule) {
+      let cum = 0;
+      return (schedule || []).map((m) => {
+        cum += parseFloat(m.percent) || 0;
+        return { ...m, cumulative: Math.round(cum * 10) / 10 };
+      });
+    }
+
+    function suggestedNextAmount(invoice) {
+      const milestones = cumulativeMilestones(invoice.payment_schedule);
+      const total = invoice.total_amount || 0;
+      const percentPaid = total > 0 ? (invoice.paid_amount / total) * 100 : 0;
+      const next = milestones.find((m) => m.cumulative > percentPaid + 0.01);
+      if (!next) return Math.max(total - invoice.paid_amount, 0);
+      return Math.max(((next.cumulative / 100) * total) - invoice.paid_amount, 0);
+    }
+
+    function renderMilestoneTrack(invoice) {
+      const milestones = cumulativeMilestones(invoice.payment_schedule);
+      const total = invoice.total_amount || 0;
+      const percent = total > 0 ? Math.min((invoice.paid_amount / total) * 100, 100) : 0;
+
+      const markers = milestones.map((m) => `
+        <div class="milestone-marker ${percent >= m.cumulative ? 'reached' : ''}" style="left:${Math.min(m.cumulative, 100)}%;" title="${escapeHtml(m.title)}"></div>
+        <div class="milestone-label" style="left:${Math.min(m.cumulative, 100)}%;">${m.cumulative}%</div>
+      `).join('');
+
+      return `
+        <div class="payment-summary-row">
+          <span class="payment-summary-amount">${fmtMoney(invoice.paid_amount)} / ${fmtMoney(invoice.total_amount)}</span>
+          <span class="payment-summary-percent">${percent.toFixed(1)}%</span>
+        </div>
+        <div class="milestone-track">
+          <div class="milestone-fill" style="width:${percent}%;"></div>
+          ${markers}
+        </div>
+      `;
+    }
+
     function receiptRow(receipt) {
       return `
-        <div class="invoice-card" style="cursor:default;">
+        <div class="payment-row">
           <div>
-            <div class="inv-number">Payment ${receipt.sequence != null ? `#${escapeHtml(receipt.sequence)}` : ''}</div>
-            <div class="inv-meta">${fmtDate(receipt.payment_date)}</div>
+            <div class="payment-amount">${fmtMoney(receipt.amount)}</div>
+            <div class="payment-meta">${fmtDate(receipt.payment_date)} · Verified</div>
           </div>
-          <div style="display:flex; align-items:center; gap:12px;">
-            <div class="inv-amount">${fmtMoney(receipt.amount)}</div>
-            <a class="btn btn-outline btn-sm" href="${receipt.receipt_url}" target="_blank" rel="noopener">View OR</a>
+          <a class="btn btn-outline btn-sm" style="width:auto;" href="${receipt.receipt_url}" target="_blank" rel="noopener">Receipt</a>
+        </div>
+      `;
+    }
+
+    function pendingRow(p) {
+      return `
+        <div class="payment-row">
+          <div>
+            <div class="payment-amount">${fmtMoney(p.amount)}</div>
+            <div class="payment-meta">Submitted ${fmtDate(p.submitted_at)} · Awaiting verification</div>
+          </div>
+          <span class="badge balance">Pending</span>
+        </div>
+      `;
+    }
+
+    function stepQuotation(invoice) {
+      const done = invoice.is_signed;
+      return `
+        <div class="journey-step">
+          <div class="journey-indicator">
+            <div class="journey-circle ${done ? 'done' : 'current'}">${done ? '✓' : '1'}</div>
+            <div class="journey-line ${done ? 'done' : ''}"></div>
+          </div>
+          <div class="journey-body">
+            <div class="journey-title-row"><span class="journey-title">Sign Quotation</span></div>
+            <div class="journey-subtitle">${done ? `Signed on ${fmtDate(invoice.signature_date)}` : 'Review and sign your quotation to get started.'}</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn ${done ? 'btn-outline' : 'btn-primary'} btn-sm" style="width:auto;" id="btn-quotation">${done ? 'View Quotation' : 'View &amp; Sign Quotation'}</button>
+              <button class="btn btn-outline btn-sm" style="width:auto;" id="btn-printable">Printable Version</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function stepPayments(invoice) {
+      const locked = !invoice.is_signed;
+      const fullyPaid = invoice.total_amount > 0 && invoice.balance_due <= 0;
+      const circleClass = locked ? '' : (fullyPaid ? 'done' : 'current');
+      return `
+        <div class="journey-step ${locked ? 'locked' : ''}">
+          <div class="journey-indicator">
+            <div class="journey-circle ${circleClass}">${fullyPaid ? '✓' : '2'}</div>
+            <div class="journey-line ${fullyPaid ? 'done' : ''}"></div>
+          </div>
+          <div class="journey-body">
+            <div class="journey-title-row"><span class="journey-title">Make Payment</span></div>
+            ${locked
+              ? '<div class="journey-locked-note">Sign your quotation first to unlock payments.</div>'
+              : `
+                ${renderMilestoneTrack(invoice)}
+                <button class="btn btn-primary btn-sm" style="width:auto;" id="btn-submit-payment" ${fullyPaid ? 'disabled' : ''}>${fullyPaid ? 'Fully Paid' : 'Submit Payment'}</button>
+                <div id="payments-list" class="payment-list"><div class="spinner"></div></div>
+              `}
+          </div>
+        </div>
+      `;
+    }
+
+    function stepSeda(invoice) {
+      const locked = !invoice.is_signed;
+      const sedaHref = invoice.seda && invoice.seda.share_token
+        ? `seda-form.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&token=${encodeURIComponent(invoice.seda.share_token)}`
+        : null;
+      const statusLabel = invoice.seda ? (invoice.seda.reg_status || 'Draft') : 'Not started';
+      return `
+        <div class="journey-step ${locked ? 'locked' : ''}">
+          <div class="journey-indicator">
+            <div class="journey-circle ${locked ? '' : 'current'}">3</div>
+          </div>
+          <div class="journey-body">
+            <div class="journey-title-row">
+              <span class="journey-title">Complete SEDA Registration</span>
+              <span class="badge">${escapeHtml(statusLabel)}</span>
+            </div>
+            ${locked
+              ? '<div class="journey-locked-note">Sign your quotation first to unlock this step.</div>'
+              : `
+                <div class="journey-subtitle">Submit your documents for SEDA/NEM registration.</div>
+                <button class="btn btn-outline btn-sm" style="width:auto;" id="btn-seda" ${sedaHref ? '' : 'disabled'}>${sedaHref ? 'Continue SEDA Form' : 'Not ready yet'}</button>
+              `}
           </div>
         </div>
       `;
     }
 
     function render(customer, invoice) {
-      const sedaHref = invoice.seda && invoice.seda.share_token
-        ? `seda-form.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&token=${encodeURIComponent(invoice.seda.share_token)}`
-        : null;
-
       content.innerHTML = `
         <a class="back-link" href="dashboard.html?customer=${encodeURIComponent(customerId)}">&larr; Back to My Invoices</a>
         <div class="card">
           <h1>${escapeHtml(invoice.invoice_number || invoice.bubble_id)}</h1>
           <p class="subtitle" style="margin-bottom:0;">${escapeHtml(customer.name || '')} · ${fmtDate(invoice.invoice_date)}</p>
-          <div class="row" style="margin-top:16px;">
-            <div>
-              <label style="margin-bottom:2px;">Total</label>
-              <div style="font-weight:700;">${fmtMoney(invoice.total_amount)}</div>
-            </div>
-            <div>
-              <label style="margin-bottom:2px;">Balance Due</label>
-              <div style="font-weight:700;">${fmtMoney(invoice.balance_due)}</div>
-            </div>
-          </div>
         </div>
 
-        <div class="section-title">What would you like to view?</div>
-        <div class="stack">
-          <button class="btn btn-primary" id="btn-quotation">View Quotation</button>
-          <button class="btn btn-outline" id="btn-printable">View Quotation (Printable)</button>
-          <button class="btn btn-outline" id="btn-seda" ${sedaHref ? '' : 'disabled'}>
-            ${sedaHref ? 'SEDA Registration Form' : 'SEDA Registration Form (not ready yet)'}
-          </button>
+        <div class="card">
+          ${stepQuotation(invoice)}
+          ${stepPayments(invoice)}
+          ${stepSeda(invoice)}
         </div>
-
-        <div class="section-title">Official Receipts</div>
-        <div id="receipts-section"><div class="card" style="padding:24px 20px;"><div class="spinner"></div></div></div>
       `;
 
       document.getElementById('btn-quotation').addEventListener('click', () => {
@@ -83,22 +182,35 @@
       document.getElementById('btn-printable').addEventListener('click', () => {
         window.open(invoice.printable_url, '_blank', 'noopener');
       });
-      if (sedaHref) {
-        document.getElementById('btn-seda').addEventListener('click', () => {
-          window.location.href = sedaHref;
+
+      const sedaBtn = document.getElementById('btn-seda');
+      if (sedaBtn && !sedaBtn.disabled) {
+        const sedaHref = `seda-form.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&token=${encodeURIComponent(invoice.seda.share_token)}`;
+        sedaBtn.addEventListener('click', () => { window.location.href = sedaHref; });
+      }
+
+      const submitBtn = document.getElementById('btn-submit-payment');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', () => {
+          const suggested = Math.round(suggestedNextAmount(invoice) * 100) / 100;
+          window.location.href = `submit-payment.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&suggested=${encodeURIComponent(suggested)}`;
         });
       }
 
-      const receiptsSection = document.getElementById('receipts-section');
-      fetchOfficialReceipts(invoice.bubble_id)
-        .then((receipts) => {
-          receiptsSection.innerHTML = receipts.length
-            ? receipts.map(receiptRow).join('')
-            : '<div class="card empty-state">No verified payments yet.</div>';
-        })
-        .catch(() => {
-          receiptsSection.innerHTML = '<div class="card empty-state">Could not load receipts right now.</div>';
-        });
+      const paymentsList = document.getElementById('payments-list');
+      if (paymentsList) {
+        const pendingRows = (invoice.pending_payments || []).map(pendingRow);
+        fetchOfficialReceipts(invoice.bubble_id)
+          .then((receipts) => {
+            const rows = [...receipts.map(receiptRow), ...pendingRows];
+            paymentsList.innerHTML = rows.length ? rows.join('') : '<div class="empty-state" style="padding:16px;">No payments yet.</div>';
+          })
+          .catch(() => {
+            paymentsList.innerHTML = pendingRows.length
+              ? pendingRows.join('')
+              : '<div class="empty-state" style="padding:16px;">Payment history is temporarily unavailable. Your balance above is up to date.</div>';
+          });
+      }
     }
 
     (async () => {

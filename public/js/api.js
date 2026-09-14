@@ -50,6 +50,25 @@ async function fetchOfficialReceipts(invoiceBubbleUid) {
   return data.receipts || [];
 }
 
+async function submitPayment(invoiceBubbleId, fields, file) {
+  const form = new FormData();
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') form.append(key, value);
+  });
+  if (file) form.append('proof', file, file.name);
+
+  const res = await fetch(`${apiBaseUrl()}/api/v1/customer-portal/invoice/${encodeURIComponent(invoiceBubbleId)}/submit-payment`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    body: form
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to submit payment.');
+  }
+  return data.payment;
+}
+
 function sedaApiBase(shareToken) {
   return `${apiBaseUrl()}/api/v1/seda-public/${encodeURIComponent(shareToken)}`;
 }

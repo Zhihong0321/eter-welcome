@@ -1,10 +1,11 @@
-const CACHE_NAME = 'eter-customer-app-v1';
+const CACHE_NAME = 'eter-customer-app-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/dashboard.html',
   '/invoice.html',
   '/seda-form.html',
+  '/submit-payment.html',
   '/css/styles.css',
   '/js/app.js',
   '/js/api.js',

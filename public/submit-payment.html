@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Submit Payment — Eter Customer App</title>
+  <meta name="theme-color" content="#4f46e5">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icons/icon-192.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="page">
+    <div class="brand-header">
+      <img src="/icons/icon-192.svg" alt="">
+      <span class="brand-name">Eter Customer App</span>
+    </div>
+    <div id="content"><div class="card" style="padding:40px 20px;"><div class="spinner"></div></div></div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    const content = document.getElementById('content');
+    const customerId = getQueryParam('customer');
+    const invoiceId = getQueryParam('invoice');
+    const suggested = getQueryParam('suggested');
+    const backHref = `invoice.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoiceId)}`;
+
+    function todayISO() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function render(invoice) {
+      const suggestedAmount = suggested && Number(suggested) > 0 ? Number(suggested).toFixed(2) : '';
+      content.innerHTML = `
+        <a class="back-link" href="${backHref}">&larr; Back to Invoice</a>
+        <div class="card">
+          <h1>Submit Payment</h1>
+          <p class="subtitle" style="margin-bottom:0;">${escapeHtml(invoice.invoice_number || invoice.bubble_id)} · Balance due: ${fmtMoney(invoice.balance_due)}</p>
+        </div>
+
+        <form id="payment-form">
+          <div class="card">
+            <div class="field">
+              <label for="f_amount">Amount Paid (RM)</label>
+              <input type="text" inputmode="decimal" id="f_amount" value="${escapeHtml(suggestedAmount)}" placeholder="0.00" required>
+              ${suggestedAmount ? `<p class="subtitle" style="margin:6px 0 0;">Suggested amount for your next payment milestone — you can change this.</p>` : ''}
+            </div>
+            <div class="field">
+              <label for="f_date">Payment Date</label>
+              <input type="date" id="f_date" value="${todayISO()}" required>
+            </div>
+            <div class="field">
+              <label for="f_method">Payment Method</label>
+              <select id="f_method">
+                <option value="Bank Transfer">Bank Transfer / Online Banking</option>
+                <option value="DuitNow">DuitNow</option>
+                <option value="Cash Deposit">Cash Deposit</option>
+                <option value="Cash">Cash</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="f_reference">Reference / Transaction No. (optional)</label>
+              <input type="text" id="f_reference" placeholder="e.g. bank transaction ID">
+            </div>
+            <div class="field">
+              <label for="f_remark">Notes (optional)</label>
+              <textarea id="f_remark" rows="2" placeholder="Anything else we should know"></textarea>
+            </div>
+            <div class="field">
+              <label for="f_proof">Proof of Payment</label>
+              <div class="upload-box">
+                <input type="file" id="f_proof" accept="application/pdf,image/*">
+              </div>
+              <p class="subtitle" style="margin:6px 0 0;">A screenshot or photo of your bank receipt helps us verify faster.</p>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="submit-btn">Submit Payment</button>
+          <p class="error-text" id="error-text" hidden></p>
+        </form>
+      `;
+
+      document.getElementById('payment-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const errorText = document.getElementById('error-text');
+        const submitBtn = document.getElementById('submit-btn');
+        errorText.hidden = true;
+
+        const amount = parseFloat(document.getElementById('f_amount').value);
+        if (!amount || amount <= 0) {
+          errorText.textContent = 'Please enter a valid amount.';
+          errorText.hidden = false;
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting…';
+        try {
+          const file = document.getElementById('f_proof').files[0] || null;
+          await submitPayment(invoice.bubble_id, {
+            amount,
+            payment_date: document.getElementById('f_date').value,
+            payment_method: document.getElementById('f_method').value,
+            reference_no: document.getElementById('f_reference').value,
+            remark: document.getElementById('f_remark').value
+          }, file);
+
+          content.innerHTML = `
+            <div class="card empty-state">
+              <p style="font-size:1.05rem; font-weight:600; color:var(--slate-900);">Payment submitted ✅</p>
+              <p>We've received your payment details. Our Finance team will verify it shortly.</p>
+              <a class="btn btn-primary" style="margin-top:14px; display:inline-flex; width:auto; padding-left:1.4rem; padding-right:1.4rem;" href="${backHref}">Back to Invoice</a>
+            </div>
+          `;
+        } catch (err) {
+          errorText.textContent = err.message || 'Something went wrong. Please try again.';
+          errorText.hidden = false;
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit Payment';
+        }
+      });
+    }
+
+    (async () => {
+      if (!customerId || !invoiceId) {
+        showFatalError(content, 'Missing customer or invoice reference.');
+        return;
+      }
+      try {
+        const data = await fetchCustomerPortal(customerId);
+        const invoice = data.invoices.find((inv) => inv.bubble_id === invoiceId);
+        if (!invoice) {
+          showFatalError(content, 'That invoice could not be found on this account.', { backHref, backLabel: 'Back to Invoice' });
+          return;
+        }
+        if (!invoice.is_signed) {
+          showFatalError(content, 'Please sign your quotation before submitting a payment.', { backHref, backLabel: 'Back to Invoice' });
+          return;
+        }
+        render(invoice);
+      } catch (err) {
+        showFatalError(content, 'Something went wrong loading this invoice. Please try again.', { backHref, backLabel: 'Back to Invoice' });
+      }
+    })();
+  </script>
+</body>
+</html>
