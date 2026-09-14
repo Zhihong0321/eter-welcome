@@ -134,6 +134,21 @@
       `;
     }
 
+    // Mirrors the 8-item checklist on seda-form.html, so the two pages never
+    // disagree about what "documents submitted" means.
+    function sedaChecklistItems(d) {
+      return [
+        { label: 'Applicant Name', done: !!(d.customer_name || '').trim() },
+        { label: 'IC Number', done: !!(d.ic_no || '').trim() },
+        { label: 'Phone Number', done: !!(d.phone || '').trim() },
+        { label: 'Installation Address', done: !!(d.installation_address || '').trim() },
+        { label: 'Identity Document', done: !!(d.mykad_pdf || (d.mykad_front && d.mykad_back)) },
+        { label: 'TNB Bill', done: !!d.tnb_bill_1 },
+        { label: 'Ownership Proof', done: !!d.property_proof },
+        { label: 'TNB Meter Photo', done: !!d.tnb_meter }
+      ];
+    }
+
     function stepSeda(invoice) {
       const locked = !invoice.is_signed;
       const sedaHref = invoice.seda && invoice.seda.share_token
@@ -154,6 +169,7 @@
               ? '<div class="journey-locked-note">Sign your quotation first to unlock this step.</div>'
               : `
                 <div class="journey-subtitle">Submit your documents for SEDA/NEM registration.</div>
+                ${sedaHref ? '<div id="seda-checklist" style="margin-bottom:12px;"><div class="spinner" style="margin:0;"></div></div>' : ''}
                 <button class="btn btn-outline btn-sm" style="width:auto;" id="btn-seda" ${sedaHref ? '' : 'disabled'}>${sedaHref ? 'Continue SEDA Form' : 'Not ready yet'}</button>
               `}
           </div>
@@ -195,6 +211,21 @@
           const suggested = Math.round(suggestedNextAmount(invoice) * 100) / 100;
           window.location.href = `submit-payment.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&suggested=${encodeURIComponent(suggested)}`;
         });
+      }
+
+      const sedaChecklistEl = document.getElementById('seda-checklist');
+      if (sedaChecklistEl && invoice.seda && invoice.seda.share_token) {
+        fetchSedaData(invoice.seda.share_token)
+          .then((d) => {
+            const items = sedaChecklistItems(d);
+            const done = items.filter((i) => i.done).length;
+            const pct = Math.round((done / items.length) * 100);
+            sedaChecklistEl.innerHTML = `
+              <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
+              <div class="progress-label" style="margin-bottom:0;">${done}/${items.length} documents submitted</div>
+            `;
+          })
+          .catch(() => { sedaChecklistEl.innerHTML = ''; });
       }
 
       const paymentsList = document.getElementById('payments-list');
