@@ -150,6 +150,7 @@ input:focus, select:focus, textarea:focus {
 }
 .badge.paid { background: #d1fae5; color: #065f46; }
 .badge.balance { background: #fef3c7; color: #92400e; }
+.badge.category { background: var(--slate-800); color: #fff; }
 
 .search-match-card {
   display: block;

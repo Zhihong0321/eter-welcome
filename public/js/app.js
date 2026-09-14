@@ -24,6 +24,17 @@ function escapeHtml(str) {
   }[c]));
 }
 
+// Derived from package.type (e.g. "Residential", "Tariff B&D Low Voltage").
+// Only the two dominant, unambiguous categories are labeled — "Special /
+// Roadshow", "EV Charger", and unset packages are left unlabeled rather
+// than guessed.
+function packageCategoryBadge(packageCategory) {
+  const t = String(packageCategory || '').toLowerCase();
+  if (t.includes('residential')) return 'RESIDENTIAL';
+  if (t.includes('tariff') || t.includes('commercial') || t.includes('business')) return 'COMMERCIAL';
+  return null;
+}
+
 function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }

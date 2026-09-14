@@ -181,6 +181,7 @@
       content.innerHTML = `
         <a class="back-link" href="dashboard.html?customer=${encodeURIComponent(customerId)}">&larr; Back to My Invoices</a>
         <div class="card">
+          ${packageCategoryBadge(invoice.package_category) ? `<span class="badge category" style="margin-bottom:8px;">${packageCategoryBadge(invoice.package_category)}</span>` : ''}
           <h1>${escapeHtml(invoice.invoice_number || invoice.bubble_id)}</h1>
           <p class="subtitle" style="margin-bottom:0;">${escapeHtml(customer.name || '')} · ${fmtDate(invoice.invoice_date)}</p>
         </div>

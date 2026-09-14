@@ -36,13 +36,18 @@
       return '<span class="badge">Draft</span>';
     }
 
+    function categoryBadge(invoice) {
+      const label = packageCategoryBadge(invoice.package_category);
+      return label ? `<span class="badge category">${label}</span> ` : '';
+    }
+
     function render(data) {
       const { customer, invoices } = data;
       const invoiceRows = invoices.length
         ? invoices.map((inv) => `
             <a class="invoice-card" href="invoice.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(inv.bubble_id)}">
               <div>
-                <div class="inv-number">${escapeHtml(inv.invoice_number || inv.bubble_id)}</div>
+                <div class="inv-number">${categoryBadge(inv)}${escapeHtml(inv.invoice_number || inv.bubble_id)}</div>
                 <div class="inv-meta">${escapeHtml(inv.package_name || '')}${inv.package_name ? ' · ' : ''}${fmtDate(inv.invoice_date)} · ${statusBadge(inv)}</div>
               </div>
               <div>
