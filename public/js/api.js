@@ -6,6 +6,10 @@ function apiBaseUrl() {
   return (window.APP_CONFIG && window.APP_CONFIG.SOLAR_APP_BASE_URL) || '';
 }
 
+function adminApiBaseUrl() {
+  return (window.APP_CONFIG && window.APP_CONFIG.ADMIN_APP_BASE_URL) || '';
+}
+
 async function searchCustomersByName(name) {
   const res = await fetch(`${apiBaseUrl()}/api/v1/customer-portal/search?name=${encodeURIComponent(name)}`, {
     headers: { Accept: 'application/json' }
@@ -30,6 +34,20 @@ async function fetchCustomerPortal(customerId) {
     throw err;
   }
   return data;
+}
+
+async function fetchOfficialReceipts(invoiceBubbleUid) {
+  const res = await fetch(`${adminApiBaseUrl()}/api/official-receipts/invoice/${encodeURIComponent(invoiceBubbleUid)}`, {
+    headers: { Accept: 'application/json' }
+  });
+  if (res.status === 404) return [];
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Could not load official receipts.');
+    err.status = res.status;
+    throw err;
+  }
+  return data.receipts || [];
 }
 
 function sedaApiBase(shareToken) {

@@ -12,9 +12,13 @@ const PORT = process.env.PORT || 4000;
 // static PWA shell and tells it which domain to call.
 const SOLAR_APP_BASE_URL = (process.env.SOLAR_APP_BASE_URL || 'https://calculator.atap.solar').replace(/\/+$/, '');
 
+// Official receipts (one per verified payment) live on the admin domain's
+// public API instead — no login/token required, same cross-origin setup.
+const ADMIN_APP_BASE_URL = (process.env.ADMIN_APP_BASE_URL || 'https://admin.atap.solar').replace(/\/+$/, '');
+
 app.get('/config.js', (req, res) => {
   res.type('application/javascript');
-  res.send(`window.APP_CONFIG = ${JSON.stringify({ SOLAR_APP_BASE_URL })};`);
+  res.send(`window.APP_CONFIG = ${JSON.stringify({ SOLAR_APP_BASE_URL, ADMIN_APP_BASE_URL })};`);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -24,5 +28,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`[Eter Customer App] running on port ${PORT}, calling ${SOLAR_APP_BASE_URL}`);
+  console.log(`[Eter Customer App] running on port ${PORT}, calling ${SOLAR_APP_BASE_URL} and ${ADMIN_APP_BASE_URL}`);
 });

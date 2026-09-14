@@ -27,6 +27,21 @@
     const customerId = getQueryParam('customer');
     const invoiceId = getQueryParam('invoice');
 
+    function receiptRow(receipt) {
+      return `
+        <div class="invoice-card" style="cursor:default;">
+          <div>
+            <div class="inv-number">Payment ${receipt.sequence != null ? `#${escapeHtml(receipt.sequence)}` : ''}</div>
+            <div class="inv-meta">${fmtDate(receipt.payment_date)}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="inv-amount">${fmtMoney(receipt.amount)}</div>
+            <a class="btn btn-outline btn-sm" href="${receipt.receipt_url}" target="_blank" rel="noopener">View OR</a>
+          </div>
+        </div>
+      `;
+    }
+
     function render(customer, invoice) {
       const sedaHref = invoice.seda && invoice.seda.share_token
         ? `seda-form.html?customer=${encodeURIComponent(customerId)}&invoice=${encodeURIComponent(invoice.bubble_id)}&token=${encodeURIComponent(invoice.seda.share_token)}`
@@ -57,6 +72,9 @@
             ${sedaHref ? 'SEDA Registration Form' : 'SEDA Registration Form (not ready yet)'}
           </button>
         </div>
+
+        <div class="section-title">Official Receipts</div>
+        <div id="receipts-section"><div class="card" style="padding:24px 20px;"><div class="spinner"></div></div></div>
       `;
 
       document.getElementById('btn-quotation').addEventListener('click', () => {
@@ -70,6 +88,17 @@
           window.location.href = sedaHref;
         });
       }
+
+      const receiptsSection = document.getElementById('receipts-section');
+      fetchOfficialReceipts(invoice.bubble_id)
+        .then((receipts) => {
+          receiptsSection.innerHTML = receipts.length
+            ? receipts.map(receiptRow).join('')
+            : '<div class="card empty-state">No verified payments yet.</div>';
+        })
+        .catch(() => {
+          receiptsSection.innerHTML = '<div class="card empty-state">Could not load receipts right now.</div>';
+        });
     }
 
     (async () => {

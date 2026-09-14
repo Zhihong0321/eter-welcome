@@ -51,6 +51,32 @@
       window.location.href = `dashboard.html?customer=${encodeURIComponent(customerId)}`;
     }
 
+    function renderMatchCard(m) {
+      const invoiceRows = (m.invoices || []).map((inv) => `
+        <div class="search-inv-row">
+          <span class="search-inv-num">${escapeHtml(inv.invoice_number || '—')}</span>
+          <span>${fmtMoney(inv.total_amount)}${inv.paid_amount > 0 ? ` · Paid ${fmtMoney(inv.paid_amount)}` : ''}</span>
+        </div>
+      `).join('');
+
+      const invoicesBlock = (m.invoices && m.invoices.length)
+        ? `
+          <div class="search-match-invoices">
+            ${invoiceRows}
+            ${m.more_invoices ? `<div class="search-inv-more">+${m.more_invoices} more</div>` : ''}
+          </div>
+        `
+        : '<div class="search-inv-empty">No quotations yet</div>';
+
+      return `
+        <button type="button" class="search-match-card" data-id="${escapeHtml(m.customer_id)}">
+          <div class="inv-number">${escapeHtml(m.name)}</div>
+          <div class="inv-meta">${m.phone_masked ? escapeHtml(m.phone_masked) : 'No phone on file'}</div>
+          ${invoicesBlock}
+        </button>
+      `;
+    }
+
     function renderMatches(matches) {
       if (!matches.length) {
         results.innerHTML = `
@@ -63,14 +89,8 @@
 
       results.innerHTML = `
         <div class="section-title">Select your account</div>
-        ${matches.map((m) => `
-          <button type="button" class="invoice-card" style="width:100%;border:1px solid var(--slate-200);text-align:left;" data-id="${escapeHtml(m.customer_id)}">
-            <div>
-              <div class="inv-number">${escapeHtml(m.name)}</div>
-              <div class="inv-meta">${m.phone_masked ? escapeHtml(m.phone_masked) : 'No phone on file'}</div>
-            </div>
-          </button>
-        `).join('')}
+        <p class="subtitle" style="margin-top:-8px;">Several accounts share this name — match your quotation number or amount below.</p>
+        ${matches.map(renderMatchCard).join('')}
         ${matches.length === 20 ? '<p class="subtitle">Showing the first 20 matches — try a more complete name if you don\'t see your account.</p>' : ''}
       `;
 
