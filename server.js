@@ -21,6 +21,32 @@ app.get('/config.js', (req, res) => {
   res.send(`window.APP_CONFIG = ${JSON.stringify({ SOLAR_APP_BASE_URL, ADMIN_APP_BASE_URL })};`);
 });
 
+// The admin list endpoint is public but sends no CORS headers, so the
+// browser cannot call it. This same-origin proxy only forwards that one
+// list. Each receipt still opens on admin at
+// /api/official-receipts/{payment.bubble_id}.
+app.get('/api/official-receipts/invoice/:invoiceUid', async (req, res) => {
+  const invoiceUid = req.params.invoiceUid || '';
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(invoiceUid)) {
+    return res.status(400).json({ error: 'Invoice UID is required' });
+  }
+
+  try {
+    const upstream = await fetch(
+      `${ADMIN_APP_BASE_URL}/api/official-receipts/invoice/${encodeURIComponent(invoiceUid)}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const body = await upstream.text();
+    res.status(upstream.status);
+    res.set('Content-Type', upstream.headers.get('content-type') || 'application/json');
+    res.set('Cache-Control', 'no-store');
+    res.send(body);
+  } catch (err) {
+    console.error('[Eter Customer App] official receipt list failed:', err);
+    res.status(502).json({ error: 'Could not load official receipts.' });
+  }
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/', (req, res) => {

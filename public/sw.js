@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eter-customer-app-v2';
+const CACHE_NAME = 'eter-customer-app-v3';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -30,12 +30,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Cache only the same-origin app shell. Every customer-portal / SEDA API call
-// goes to a different origin (Solar Calculator v2) and is always live data —
-// never intercepted here, so customers always see current invoice/SEDA state.
+// Cache only the same-origin app shell. Customer-portal / SEDA calls go to
+// Solar Calculator v2. Official-receipt lists are proxied on this origin at
+// /api/ and must stay live — one new verified payment means one new receipt.
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin || event.request.method !== 'GET') {
+  if (url.origin !== self.location.origin || event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
     return;
   }
 

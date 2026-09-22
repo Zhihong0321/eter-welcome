@@ -2,3 +2,6 @@ node_modules/
 .env
 .env.local
 .env.production
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

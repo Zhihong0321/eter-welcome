@@ -36,9 +36,21 @@ async function fetchCustomerPortal(customerId) {
   return data;
 }
 
+// One official receipt per verified payment:
+// {ADMIN}/api/official-receipts/{payment.bubble_id}
+// Do not use the list payload's receipt_url. Admin builds that from the
+// request host, which is an internal address, not the public admin domain.
+function officialReceiptUrl(paymentUid) {
+  const base = String(adminApiBaseUrl() || '').replace(/\/+$/, '');
+  return `${base}/api/official-receipts/${encodeURIComponent(paymentUid)}`;
+}
+
 async function fetchOfficialReceipts(invoiceBubbleUid) {
-  const res = await fetch(`${adminApiBaseUrl()}/api/official-receipts/invoice/${encodeURIComponent(invoiceBubbleUid)}`, {
-    headers: { Accept: 'application/json' }
+  // Same-origin proxy of the admin list. Opening a receipt does not use
+  // this call — officialReceiptUrl() points at the admin PDF for that payment.
+  const res = await fetch(`/api/official-receipts/invoice/${encodeURIComponent(invoiceBubbleUid)}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store'
   });
   if (res.status === 404) return [];
   const data = await res.json().catch(() => ({}));

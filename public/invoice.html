@@ -67,13 +67,18 @@
     }
 
     function receiptRow(receipt) {
+      const paymentUid = receipt.payment_uid || receipt.bubble_id;
+      const href = paymentUid ? officialReceiptUrl(paymentUid) : (receipt.receipt_url || '');
+      const which = receipt.sequence ? `Payment ${receipt.sequence}` : 'Payment';
       return `
         <div class="payment-row">
           <div>
             <div class="payment-amount">${fmtMoney(receipt.amount)}</div>
-            <div class="payment-meta">${fmtDate(receipt.payment_date)} · Verified</div>
+            <div class="payment-meta">${fmtDate(receipt.payment_date)} · ${escapeHtml(which)} · Verified</div>
           </div>
-          <a class="btn btn-outline btn-sm" style="width:auto;" href="${receipt.receipt_url}" target="_blank" rel="noopener">Receipt</a>
+          ${href
+            ? `<a class="btn btn-outline btn-sm" style="width:auto;" href="${escapeHtml(href)}" target="_blank" rel="noopener">Official Receipt</a>`
+            : ''}
         </div>
       `;
     }
@@ -123,7 +128,8 @@
           <div class="journey-body">
             <div class="journey-title-row"><span class="journey-title">Make Payment</span></div>
             ${locked
-              ? '<div class="journey-locked-note">Sign your quotation first to unlock payments.</div>'
+              ? `<div class="journey-locked-note">Sign your quotation first to submit a new payment.</div>
+                <div id="payments-list" class="payment-list"><div class="spinner"></div></div>`
               : `
                 ${renderMilestoneTrack(invoice)}
                 <button class="btn btn-primary btn-sm" style="width:auto;" id="btn-submit-payment" ${fullyPaid ? 'disabled' : ''}>${fullyPaid ? 'Fully Paid' : 'Submit Payment'}</button>
@@ -235,12 +241,22 @@
         fetchOfficialReceipts(invoice.bubble_id)
           .then((receipts) => {
             const rows = [...receipts.map(receiptRow), ...pendingRows];
-            paymentsList.innerHTML = rows.length ? rows.join('') : '<div class="empty-state" style="padding:16px;">No payments yet.</div>';
+            if (!rows.length) {
+              paymentsList.innerHTML = invoice.is_signed
+                ? '<div class="empty-state" style="padding:16px;">No payments yet.</div>'
+                : '';
+              return;
+            }
+            paymentsList.innerHTML = rows.join('');
           })
           .catch(() => {
-            paymentsList.innerHTML = pendingRows.length
-              ? pendingRows.join('')
-              : '<div class="empty-state" style="padding:16px;">Payment history is temporarily unavailable. Your balance above is up to date.</div>';
+            if (pendingRows.length) {
+              paymentsList.innerHTML = pendingRows.join('');
+              return;
+            }
+            paymentsList.innerHTML = invoice.is_signed
+              ? '<div class="empty-state" style="padding:16px;">Payment history is temporarily unavailable. Your balance above is up to date.</div>'
+              : '';
           });
       }
     }
