@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eter-customer-app-v3';
+const CACHE_NAME = 'eter-customer-app-v4';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -11,6 +11,7 @@ const APP_SHELL = [
   '/js/api.js',
   '/config.js',
   '/manifest.json',
+  '/logo/eternalgy.png',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg'
 ];

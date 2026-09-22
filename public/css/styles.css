@@ -43,8 +43,7 @@ a { color: inherit; }
   gap: 10px;
   margin-bottom: 28px;
 }
-.brand-header img { width: 36px; height: 36px; }
-.brand-header .brand-name { font-weight: 700; font-size: 1.05rem; color: var(--slate-900); }
+.brand-header img { width: auto; height: 42px; max-width: min(100%, 320px); display: block; }
 
 .card {
   background: #fff;
