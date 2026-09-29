@@ -39,7 +39,7 @@ function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name);
 }
 
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', durationMs = 4000) {
   let wrap = document.querySelector('.toast-wrap');
   if (!wrap) {
     wrap = document.createElement('div');
@@ -50,7 +50,8 @@ function showToast(message, type = 'info') {
   el.className = `toast ${type}`;
   el.textContent = message;
   wrap.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  if (durationMs > 0) setTimeout(() => el.remove(), durationMs);
+  return el;
 }
 
 function showLoading(container) {

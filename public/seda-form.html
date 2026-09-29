@@ -395,11 +395,63 @@
         return;
       }
       try {
+        const draft = collectPayload();
         await uploadSedaFile(shareToken, fieldKey, file);
         showToast('Uploaded.', 'success');
-        await loadData();
+        await loadData(draft);
+        scanAndFill(fieldKey, file);
       } catch (err) {
         showToast(err.message || 'Upload failed.', 'error');
+      }
+    }
+
+    // Documents whose text is read (OCR) to pre-fill the form. The customer
+    // still checks the fields and presses Save — nothing is saved here.
+    const SCAN_KINDS = {
+      mykad_front: 'mykad',
+      mykad_pdf: 'mykad',
+      tnb_bill_1: 'tnb-bill',
+      tnb_bill_2: 'tnb-bill',
+      tnb_bill_3: 'tnb-bill',
+      tnb_bills_12_months: 'tnb-bill'
+    };
+
+    function setFormValue(key, value) {
+      const el = document.getElementById(`f_${key}`);
+      if (!el || !value) return false;
+      el.value = value;
+      el.classList.remove('autofilled');
+      void el.offsetWidth;
+      el.classList.add('autofilled');
+      return true;
+    }
+
+    async function scanAndFill(fieldKey, file) {
+      const kind = SCAN_KINDS[fieldKey];
+      if (!kind) return;
+      const status = showToast('Reading your document…', 'info', 0);
+      try {
+        const r = await scanDocument(kind, file);
+        const filled = [];
+        if (kind === 'mykad') {
+          if (setFormValue('ic_no', r.ic_no)) filled.push('IC number');
+          if (setFormValue('customer_name', r.name)) filled.push('name');
+        } else {
+          if (setFormValue('installation_address', r.address)) filled.push('installation address');
+          if (setFormValue('tnb_account_no', r.account_no)) filled.push('TNB account number');
+        }
+        status.remove();
+        if (filled.length) {
+          showToast(`Filled in your ${filled.join(' and ')}. Please check, then press Save.`, 'success', 7000);
+        } else if (!r.account_masked) {
+          showToast('We could not read this document clearly. Please fill in the details yourself.', 'error', 6000);
+        }
+        if (r.account_masked) {
+          showToast('This TNB bill hides part of the account number, so it is not the account holder’s copy. Upload the full bill to fill in the account number.', 'error', 9000);
+        }
+      } catch (err) {
+        status.remove();
+        showToast('We could not read this document automatically. Please fill in the details yourself.', 'error', 6000);
       }
     }
 
@@ -413,6 +465,8 @@
         showToast(`You can only add ${maxFiles} more file(s).`, 'error');
         return;
       }
+      const draft = collectPayload();
+      let firstUploaded = null;
       for (const file of files) {
         if (file.size > maxMB * 1024 * 1024) {
           showToast(`${file.name} is too large. Max ${maxMB}MB.`, 'error');
@@ -420,12 +474,14 @@
         }
         try {
           await uploadSedaFile(shareToken, fieldKey, file);
+          if (!firstUploaded) firstUploaded = file;
         } catch (err) {
           showToast(err.message || `Failed to upload ${file.name}.`, 'error');
         }
       }
       showToast('Upload complete.', 'success');
-      await loadData();
+      await loadData(draft);
+      if (firstUploaded) scanAndFill(fieldKey, firstUploaded);
     }
 
     async function handleDelete(btn) {
@@ -449,9 +505,17 @@
       }
     }
 
-    async function loadData() {
+    // `draft` = form values typed but not yet saved; re-applied after the
+    // re-render so an upload never wipes what the customer already entered.
+    async function loadData(draft) {
       sedaData = await fetchSedaData(shareToken);
       renderForm();
+      if (draft) {
+        Object.entries(draft).forEach(([key, value]) => {
+          const el = document.getElementById(`f_${key}`);
+          if (el) el.value = value;
+        });
+      }
     }
 
     (async () => {

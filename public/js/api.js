@@ -124,6 +124,76 @@ async function uploadSedaFile(shareToken, fieldKey, file) {
   return data;
 }
 
+// ---- Document scanning (MyKad / TNB bill) ----------------------------------
+// The LLM reads one JPEG page. Photos are shrunk first (phone photos are huge);
+// PDFs have their first page rendered with pdf.js, loaded only when needed.
+const SCAN_MAX_SIDE = 1800;
+const PDFJS_VERSION = '3.11.174';
+
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
+    s.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+      resolve(window.pdfjsLib);
+    };
+    s.onerror = () => reject(new Error('Could not load the PDF reader.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function fileToScanImage(file) {
+  let source;
+  let width;
+  let height;
+  if (file.type === 'application/pdf') {
+    const pdfjs = await loadPdfJs();
+    const pdf = await pdfjs.getDocument({
+      data: await file.arrayBuffer(),
+      // PDFs that don't embed their fonts (common for generated bills) need these.
+      standardFontDataUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`
+    }).promise;
+    const page = await pdf.getPage(1);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: Math.min(2.5, SCAN_MAX_SIDE / Math.max(base.width, base.height)) });
+    source = document.createElement('canvas');
+    source.width = width = Math.round(viewport.width);
+    source.height = height = Math.round(viewport.height);
+    await page.render({ canvasContext: source.getContext('2d'), viewport }).promise;
+  } else {
+    source = await createImageBitmap(file);
+    width = source.width;
+    height = source.height;
+  }
+  const ratio = Math.min(1, SCAN_MAX_SIDE / Math.max(width, height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
+}
+
+// kind: 'mykad' | 'tnb-bill'. Resolves to the OCR result; nothing is saved.
+async function scanDocument(kind, file) {
+  const image = await fileToScanImage(file);
+  const res = await fetch(`/api/ocr/${kind}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ image })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Could not read the document.');
+  }
+  return data;
+}
+
 async function deleteSedaFile(shareToken, fieldKey, url) {
   const res = await fetch(`${sedaApiBase(shareToken)}/file/${encodeURIComponent(fieldKey)}`, {
     method: 'DELETE',
