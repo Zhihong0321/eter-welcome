@@ -52,6 +52,8 @@
       company_stamp: { label: 'Company Stamp',       accept: 'application/pdf,image/*', maxMB: 25 }
     };
     const TNB_12M_FIELD = { key: 'tnb_bills_12_months', label: 'TNB Bills (Up to 12 Months)', accept: 'application/pdf,image/*', maxMB: 25, maxFiles: 12 };
+    // Mirrors maxItems for property_proof in routes/sedaRoutes.js — a list, not a single file.
+    const PROPERTY_PROOF_FIELD = { key: 'property_proof', label: 'Property Ownership Proof', accept: 'application/pdf,image/*', maxMB: 25, maxFiles: 5 };
 
     let sedaData = null;
 
@@ -93,26 +95,27 @@
       `;
     }
 
-    function renderTnbBillsMulti() {
-      const urls = Array.isArray((sedaData || {})[TNB_12M_FIELD.key]) ? sedaData[TNB_12M_FIELD.key] : [];
+    function renderMultiField(cfg) {
+      const urls = Array.isArray((sedaData || {})[cfg.key]) ? sedaData[cfg.key] : [];
       const items = urls.map((url) => `
         <div class="upload-box has-file" style="margin-bottom:8px;">
-          ${renderSinglePreview(TNB_12M_FIELD.key, url)}
+          ${renderSinglePreview(cfg.key, url)}
         </div>
       `).join('');
-      const canAddMore = urls.length < TNB_12M_FIELD.maxFiles;
+      const canAddMore = urls.length < cfg.maxFiles;
       return `
         <div class="field">
-          <label>${escapeHtml(TNB_12M_FIELD.label)} (${urls.length}/${TNB_12M_FIELD.maxFiles})</label>
+          <label>${escapeHtml(cfg.label)} (${urls.length}/${cfg.maxFiles})</label>
           ${items}
           ${canAddMore ? `
             <div class="upload-box">
-              <input type="file" accept="${TNB_12M_FIELD.accept}" multiple data-action="upload-multi" data-field="${TNB_12M_FIELD.key}" data-max-mb="${TNB_12M_FIELD.maxMB}" data-max-files="${TNB_12M_FIELD.maxFiles - urls.length}">
+              <input type="file" accept="${cfg.accept}" multiple data-action="upload-multi" data-field="${cfg.key}" data-max-mb="${cfg.maxMB}" data-max-files="${cfg.maxFiles - urls.length}">
             </div>
           ` : ''}
         </div>
       `;
     }
+    function renderTnbBillsMulti() { return renderMultiField(TNB_12M_FIELD); }
 
     function renderMykadSection() {
       const hasPdf = Boolean((sedaData || {}).mykad_pdf);
@@ -186,7 +189,7 @@
         { label: 'Installation Address', done: !!(d.installation_address || '').trim() },
         { label: 'Identity Document', done: !!(d.mykad_pdf || (d.mykad_front && d.mykad_back)) },
         { label: 'TNB Bill', done: !!d.tnb_bill_1 },
-        { label: 'Ownership Proof', done: !!d.property_proof },
+        { label: 'Ownership Proof', done: Array.isArray(d.property_proof) && d.property_proof.length > 0 },
         { label: 'TNB Meter Photo', done: !!d.tnb_meter }
       ];
       const doneCount = items.filter((i) => i.done).length;
@@ -291,7 +294,7 @@
 
           <div class="section-title">Supporting Documents</div>
           <div class="card">
-            ${renderUploadField('property_proof', FILE_FIELDS.property_proof)}
+            ${renderMultiField(PROPERTY_PROOF_FIELD)}
             ${renderUploadField('tnb_meter', FILE_FIELDS.tnb_meter)}
           </div>
 

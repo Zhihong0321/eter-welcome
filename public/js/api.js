@@ -93,7 +93,31 @@ async function fetchSedaData(shareToken) {
     err.status = res.status;
     throw err;
   }
-  return data.data;
+  return normalizeSedaData(data.data);
+}
+
+// The API returns database column names, which differ from the form's keys:
+// phone is `applicant_phone`, the MyKad photos are `ic_copy_front/back`, and
+// ownership proof is a list. Same fallbacks as Solar Calculator's own SEDA page.
+function normalizeSedaData(d) {
+  const profile = d.customer_profile || {};
+  const text = (...values) => {
+    const hit = values.find((v) => typeof v === 'string' && v.trim());
+    return hit ? hit.trim() : '';
+  };
+  const proof = Array.isArray(d.property_ownership_prove) ? d.property_ownership_prove : [];
+  return {
+    ...d,
+    customer_name: text(d.applicant_name, profile.name, d.customer_name),
+    phone: text(d.applicant_phone, profile.phone, d.phone),
+    email: text(d.applicant_email, d.email, profile.email),
+    ic_no: text(d.applicant_ic, d.ic_no),
+    tin: text(d.applicant_tin, d.tin),
+    registered_address: text(d.registered_address, profile.address, d.address),
+    mykad_front: d.ic_copy_front || d.mykad_front || null,
+    mykad_back: d.ic_copy_back || d.mykad_back || null,
+    property_proof: proof
+  };
 }
 
 async function saveSedaFields(shareToken, fields) {
