@@ -4,6 +4,7 @@ const express = require('express');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+app.use(express.json({ limit: '1mb' }));
 
 // The only "backend" this app has: it never touches a database directly.
 // Every data read/write goes straight from the browser to Solar Calculator v2
@@ -11,6 +12,8 @@ const PORT = process.env.PORT || 4000;
 // allows cross-origin requests (CORS origin: '*'). This file just serves the
 // static PWA shell and tells it which domain to call.
 const SOLAR_APP_BASE_URL = (process.env.SOLAR_APP_BASE_URL || 'https://calculator.atap.solar').replace(/\/+$/, '');
+const SAJ_API_BASE_URL = (process.env.SAJ_API_BASE_URL || 'https://ee-saj-api-production.up.railway.app').replace(/\/+$/, '');
+const SAJ_TRIGGER_TOKEN = process.env.SAJ_TRIGGER_TOKEN || process.env.SAJ_API_TOKEN || '';
 
 // Official receipts (one per verified payment) live on the admin domain's
 // public API instead — no login/token required, same cross-origin setup.
@@ -19,6 +22,58 @@ const ADMIN_APP_BASE_URL = (process.env.ADMIN_APP_BASE_URL || 'https://admin.ata
 app.get('/config.js', (req, res) => {
   res.type('application/javascript');
   res.send(`window.APP_CONFIG = ${JSON.stringify({ SOLAR_APP_BASE_URL, ADMIN_APP_BASE_URL })};`);
+});
+
+// SAJ stays behind this same-origin proxy so its trigger token never reaches
+// the customer browser. Only the two customer-scoped read/sync operations are
+// exposed here; the admin, account, backfill and retention endpoints remain private.
+function validCustomerKey(value) {
+  return typeof value === 'string' && /^[A-Za-z0-9._-]{1,120}$/.test(value);
+}
+
+async function sajRequest(pathname, options = {}) {
+  const headers = { Accept: 'application/json', ...(options.headers || {}) };
+  if (SAJ_TRIGGER_TOKEN) headers['X-Trigger-Token'] = SAJ_TRIGGER_TOKEN;
+  const upstream = await fetch(`${SAJ_API_BASE_URL}${pathname}`, {
+    ...options,
+    headers,
+    signal: AbortSignal.timeout(120000)
+  });
+  const body = await upstream.text();
+  return { upstream, body };
+}
+
+app.post('/api/saj/sync', async (req, res) => {
+  const customer = String(req.body?.customer || '').trim();
+  const days = Number(req.body?.days || 7);
+  if (!validCustomerKey(customer)) return res.status(400).json({ error: 'A valid customer reference is required.' });
+  if (![7, 30].includes(days)) return res.status(400).json({ error: 'Data range must be 7 or 30 days.' });
+
+  try {
+    const { upstream, body } = await sajRequest(`/sync/fast?customer_id=${encodeURIComponent(customer)}&days=${days}&debug=false`, { method: 'POST' });
+    res.status(upstream.status).set('Content-Type', upstream.headers.get('content-type') || 'application/json').set('Cache-Control', 'no-store').send(body);
+  } catch (err) {
+    console.error('[Eter Customer App] SAJ sync failed:', err.message);
+    res.status(502).json({ error: 'The energy data service is temporarily unavailable.' });
+  }
+});
+
+app.get('/api/saj/series', async (req, res) => {
+  const customer = String(req.query.customer || '').trim();
+  const days = Number(req.query.days || 7);
+  if (!validCustomerKey(customer)) return res.status(400).json({ error: 'A valid customer reference is required.' });
+  if (![7, 30].includes(days)) return res.status(400).json({ error: 'Data range must be 7 or 30 days.' });
+
+  try {
+    // The sync response may include the actual plant UID. The browser only
+    // calls this route after a successful sync and the page renders the
+    // upstream series defensively because the API does not publish a schema.
+    const { upstream, body } = await sajRequest(`/plant/${encodeURIComponent(customer)}/series?days=${days}`);
+    res.status(upstream.status).set('Content-Type', upstream.headers.get('content-type') || 'application/json').set('Cache-Control', 'no-store').send(body);
+  } catch (err) {
+    console.error('[Eter Customer App] SAJ series failed:', err.message);
+    res.status(502).json({ error: 'The energy data service is temporarily unavailable.' });
+  }
 });
 
 // The admin list endpoint is public but sends no CORS headers, so the
