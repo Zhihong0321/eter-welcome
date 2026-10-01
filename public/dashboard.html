@@ -40,7 +40,98 @@
       return label ? `<span class="badge category">${label}</span> ` : '';
     }
 
+    function energyRows(value) {
+      const seen = new Set();
+      const rows = [];
+      const dateLike = (value) => /^\d{4}-\d{1,2}-\d{1,2}/.test(String(value || ''));
+      function add(date, amount) {
+        const numeric = Number(amount);
+        if (!date || !dateLike(date) || !Number.isFinite(numeric)) return;
+        const key = `${date}|${numeric}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          rows.push({ date, value: numeric });
+        }
+      }
+      function visit(node, depth = 0) {
+        if (!node || depth > 6 || rows.length >= 31) return;
+        if (Array.isArray(node)) {
+          node.forEach((item) => {
+            if (Array.isArray(item) && item.length >= 2) add(item[0], item[1]);
+            else visit(item, depth + 1);
+          });
+          return;
+        }
+        if (typeof node !== 'object') return;
+        const date = node.date || node.day || node.timestamp || node.datetime || node.time;
+        const amount = node.kwh ?? node.kWh ?? node.energy_kwh ?? node.energy ?? node.value ?? node.yield ?? node.daily_kwh;
+        add(date, amount);
+        Object.entries(node).forEach(([key, child]) => {
+          if (dateLike(key) && (typeof child === 'number' || typeof child === 'string')) add(key, child);
+          else if (['series', 'daily', 'daily_kwh', 'daily_energy', 'data', 'results', 'result', 'payload', 'items', 'records', 'rows', 'chart'].includes(key)) visit(child, depth + 1);
+        });
+      }
+      visit(value);
+      return rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+
+    function findPlantUid(data, syncData) {
+      function visit(value, depth = 0) {
+        if (!value || depth > 6 || typeof value !== 'object') return '';
+        if (Array.isArray(value)) {
+          for (const item of value) { const found = visit(item, depth + 1); if (found) return found; }
+          return '';
+        }
+        const direct = value.plant_uid || value.plantUid || value.plant_id || value.plantId;
+        if (direct) return String(direct);
+        for (const child of Object.values(value)) {
+          const found = visit(child, depth + 1);
+          if (found) return found;
+        }
+        return '';
+      }
+      return visit(syncData) || visit(data.customer) || visit(data);
+    }
+
+    function renderEnergyPanel(range, rows, errorMessage = '') {
+      const panel = document.getElementById('energy-panel');
+      if (!panel) return;
+      const label = range === 30 ? 'Last 30 days' : 'Last 7 days';
+      const content = rows.length
+        ? `<div class="energy-list">${rows.map((row) => `<div class="energy-row"><span>${escapeHtml(fmtDate(row.date))}</span><strong>${row.value.toLocaleString('en-MY', { maximumFractionDigits: 2 })} kWh</strong></div>`).join('')}</div>`
+        : `<div class="energy-empty">${escapeHtml(errorMessage || 'Energy data is not available yet.')}</div>`;
+      panel.innerHTML = `
+        <div class="energy-panel-heading"><div><h2 style="margin-bottom:4px;">Energy usage</h2><p class="subtitle" style="margin:0;">${label}</p></div><span class="badge">${range} days</span></div>
+        ${content}
+        ${range < 30 ? '<button type="button" class="btn btn-outline btn-sm energy-history-btn" id="load-earlier-data">View earlier data (30 days)</button>' : '<p class="energy-note">Showing the full available 30-day range.</p>'}
+      `;
+      const earlier = document.getElementById('load-earlier-data');
+      if (earlier) earlier.addEventListener('click', () => loadEnergyData(window.__portalData, 30));
+    }
+
+    async function loadEnergyData(data, range = 7) {
+      const panel = document.getElementById('energy-panel');
+      if (!panel) return;
+      showDataLoading(`Loading ${range}-day energy data`, range === 7 ? 'Preparing the latest usage first.' : 'Fetching earlier usage for this account.');
+      try {
+        const syncData = await syncSajData(customerId, range);
+        let source = syncData;
+        let rows = energyRows(source);
+        if (!rows.length) {
+          const plantUid = findPlantUid(data, syncData);
+          if (plantUid) rows = energyRows(await fetchSajSeries(plantUid, range));
+        }
+        renderEnergyPanel(range, rows, rows.length ? '' : 'The sync completed, but no daily readings were returned.');
+      } catch (err) {
+        renderEnergyPanel(range, [], err.message || 'Energy data could not be loaded.');
+        showToast(range === 7 ? 'Your account loaded, but energy data is temporarily unavailable.' : 'Earlier energy data could not be loaded.', 'error');
+      } finally {
+        hideDataLoading();
+      }
+    }
+
     function render(data) {
+      window.__portalData = data;
       const { customer, invoices } = data;
       const invoiceRows = invoices.length
         ? invoices.map((inv) => `
@@ -62,6 +153,9 @@
           <h1>${escapeHtml(customer.name || 'Your Account')}</h1>
           <p class="subtitle" style="margin-bottom:0;">Customer ID: ${escapeHtml(customer.customer_id)}</p>
         </div>
+        <div class="card" id="energy-panel">
+          <div class="energy-panel-heading"><div><h2 style="margin-bottom:4px;">Energy usage</h2><p class="subtitle" style="margin:0;">Preparing the latest usage…</p></div><div class="spinner" style="margin:0;"></div></div>
+        </div>
         <div class="section-title">Your Invoices</div>
         ${invoiceRows}
       `;
@@ -75,6 +169,7 @@
       try {
         const data = await fetchCustomerPortal(customerId);
         render(data);
+        loadEnergyData(data, 7);
       } catch (err) {
         showFatalError(content, err.status === 404
           ? "We couldn't find that Customer ID."

@@ -36,6 +36,35 @@ async function fetchCustomerPortal(customerId) {
   return data;
 }
 
+async function syncSajData(customer, days) {
+  const res = await fetch('/api/saj/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ customer, days })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Could not load energy data.');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+async function fetchSajSeries(customer, days) {
+  const res = await fetch(`/api/saj/series?customer=${encodeURIComponent(customer)}&days=${encodeURIComponent(days)}`, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store'
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || 'Could not read energy data.');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
 // One official receipt per verified payment:
 // {ADMIN}/api/official-receipts/{payment.bubble_id}
 // Do not use the list payload's receipt_url. Admin builds that from the

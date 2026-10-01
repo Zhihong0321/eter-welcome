@@ -58,6 +58,25 @@ function showLoading(container) {
   container.innerHTML = '<div class="card" style="padding:40px 20px;"><div class="spinner"></div></div>';
 }
 
+function showDataLoading(message, detail = '') {
+  let overlay = document.querySelector('.data-loading-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'data-loading-overlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `<div class="data-loading-card"><div class="spinner"></div><strong>${escapeHtml(message)}</strong>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</div>`;
+  overlay.hidden = false;
+  return overlay;
+}
+
+function hideDataLoading() {
+  const overlay = document.querySelector('.data-loading-overlay');
+  if (overlay) overlay.hidden = true;
+}
+
 function showFatalError(container, message, options = {}) {
   const backHref = options.backHref || 'index.html';
   const backLabel = options.backLabel || 'Start over';
